@@ -11,8 +11,13 @@ raw text -> entity normalisation -> word TF-IDF (1-2 grams)  \
 
 Why this design: spam is recognisable from its *shape* (links, phone numbers, money amounts,
 SHOUTING) as much as its vocabulary, so entities are replaced with placeholder tokens
-(`__url__`, `__money__`, `__phone__`, `__allcaps__`, ...) before vectorisation. Character n-grams
-on top of word n-grams catch obfuscations such as `V1agra` or `fr€e` that word features miss.
+(`__url__`, `__money__`, `__phone__`, `__allcaps__`, ...) before vectorisation, and leetspeak is
+de-obfuscated (`fr33 m0ney` also contributes `free money`). Character n-grams on top of word
+n-grams catch the remaining spelling tricks that word features miss.
+
+Known limitation: the model only knows the vocabulary of the corpus it was trained on. The SMS
+corpus has almost no pharmacy spam, so `V1agra ch3ap` still scores as ham — train on your own mail
+(`--dataset my_emails.csv`) to match your traffic.
 
 ## Results
 
@@ -20,9 +25,9 @@ Held-out test set (20% of the SMS Spam Collection, 1032 messages, `--random-stat
 
 | classifier            | accuracy | precision (spam) | recall (spam) |     F1 | ROC AUC |
 | --------------------- | -------: | ---------------: | ------------: | -----: | ------: |
-| `linear-svm` (default) |   0.9922 |           0.9762 |        0.9609 | 0.9685 |  0.9990 |
-| `logreg`               |   0.9922 |           0.9839 |        0.9531 | 0.9683 |  0.9991 |
-| `naive-bayes`          |   0.9893 |           0.9756 |        0.9375 | 0.9562 |  0.9933 |
+| `linear-svm` (default) |   0.9922 |           0.9762 |        0.9609 | 0.9685 |  0.9989 |
+| `logreg`               |   0.9922 |           0.9839 |        0.9531 | 0.9683 |  0.9990 |
+| `naive-bayes`          |   0.9903 |           0.9836 |        0.9375 | 0.9600 |  0.9925 |
 
 Reproduce with `spam-detector train --classifier <name>`; every run writes `models/metrics.json`.
 
@@ -101,3 +106,6 @@ tests/           pytest suite running on the bundled dataset (no network)
 pytest
 ruff check . && ruff format --check .
 ```
+
+Datasets need at least four examples per class; smaller ones are rejected with a clear message, and
+cross-validation folds are reduced automatically when the data cannot support five.

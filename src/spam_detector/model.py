@@ -15,12 +15,14 @@ from spam_detector.preprocess import normalize_corpus
 CLASSIFIERS = ("linear-svm", "logreg", "naive-bayes")
 
 
-def build_classifier(name: str):
+def build_classifier(name: str, calibration_folds: int = 5):
     """Instantiate one of the supported classifiers, all exposing ``predict_proba``."""
     if name == "linear-svm":
         # LinearSVC has the best precision/recall trade-off on short text but no
         # probabilities of its own, so calibrate it to keep the scoring API uniform.
-        return CalibratedClassifierCV(LinearSVC(C=1.0, class_weight="balanced"), cv=5)
+        return CalibratedClassifierCV(
+            LinearSVC(C=1.0, class_weight="balanced"), cv=calibration_folds
+        )
     if name == "logreg":
         return LogisticRegression(C=10.0, max_iter=2000, class_weight="balanced")
     if name == "naive-bayes":
@@ -28,7 +30,7 @@ def build_classifier(name: str):
     raise ValueError(f"Unknown classifier {name!r}; choose one of {list(CLASSIFIERS)}")
 
 
-def build_pipeline(classifier: str = "linear-svm") -> Pipeline:
+def build_pipeline(classifier: str = "linear-svm", calibration_folds: int = 5) -> Pipeline:
     """Build the end-to-end pipeline that maps raw message text to a spam score."""
     features = FeatureUnion(
         [
@@ -58,6 +60,6 @@ def build_pipeline(classifier: str = "linear-svm") -> Pipeline:
         [
             ("normalize", FunctionTransformer(normalize_corpus, validate=False)),
             ("features", features),
-            ("classifier", build_classifier(classifier)),
+            ("classifier", build_classifier(classifier, calibration_folds)),
         ]
     )

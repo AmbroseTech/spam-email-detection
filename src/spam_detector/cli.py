@@ -63,16 +63,20 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.command == "train":
-        result = train(
-            dataset=args.dataset,
-            classifier=args.classifier,
-            model_path=args.model_path,
-            metrics_path=args.metrics_path,
-            test_size=args.test_size,
-            target_precision=args.target_precision,
-            cv_folds=args.cv_folds,
-            random_state=args.random_state,
-        )
+        try:
+            result = train(
+                dataset=args.dataset,
+                classifier=args.classifier,
+                model_path=args.model_path,
+                metrics_path=args.metrics_path,
+                test_size=args.test_size,
+                target_precision=args.target_precision,
+                cv_folds=args.cv_folds,
+                random_state=args.random_state,
+            )
+        except (ValueError, FileNotFoundError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
         print(format_summary(result))
         return 0
 
@@ -81,7 +85,11 @@ def main(argv: list[str] | None = None) -> int:
         if not messages:
             print("No messages given. Pass text arguments, --file or pipe stdin.", file=sys.stderr)
             return 2
-        predictions = SpamDetector.load(args.model_path).predict(messages)
+        try:
+            predictions = SpamDetector.load(args.model_path).predict(messages)
+        except FileNotFoundError as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 2
         if args.json:
             print(
                 json.dumps(

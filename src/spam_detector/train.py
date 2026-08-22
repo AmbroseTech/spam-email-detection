@@ -81,6 +81,35 @@ def evaluate(y_true, scores, threshold: float) -> dict:
     }
 
 
+MIN_PER_CLASS = 4
+
+
+def _check_dataset(frame: pd.DataFrame, dataset: str) -> None:
+    counts = frame["label"].value_counts()
+    missing = {0, 1} - set(counts.index)
+    if missing:
+        names = ", ".join("spam" if label == 1 else "ham" for label in sorted(missing))
+        raise ValueError(f"{dataset} contains no {names} examples; both classes are required.")
+    if counts.min() < MIN_PER_CLASS:
+        raise ValueError(
+            f"{dataset} has only {counts.min()} example(s) of the rarest class; "
+            f"at least {MIN_PER_CLASS} per class are needed to train and evaluate."
+        )
+
+
+def _fold_counts(y_train: pd.Series, cv_folds: int) -> tuple[int, int]:
+    """Fit the requested cross-validation to the data.
+
+    Returns the usable number of evaluation folds (0 disables cross-validation) and the
+    number of folds the probability calibrator may use, so that tiny datasets train
+    instead of failing deep inside scikit-learn.
+    """
+    smallest_class = int(y_train.value_counts().min())
+    evaluation_folds = min(cv_folds, smallest_class) if smallest_class >= 4 else 0
+    calibration_folds = 5 if smallest_class >= 25 else 2
+    return evaluation_folds, calibration_folds
+
+
 def train(
     dataset: str = "sms-spam",
     classifier: str = "linear-svm",
@@ -93,6 +122,7 @@ def train(
 ) -> TrainingResult:
     """Train the pipeline on ``dataset`` and persist the fitted model."""
     frame: pd.DataFrame = load_dataset(dataset)
+    _check_dataset(frame, dataset)
     x_train, x_test, y_train, y_test = train_test_split(
         frame["text"],
         frame["label"],
@@ -101,7 +131,14 @@ def train(
         random_state=random_state,
     )
 
-    pipeline = build_pipeline(classifier)
+    if int(y_train.value_counts().min()) < 2:
+        raise ValueError(
+            f"test_size={test_size} leaves fewer than 2 training examples for one class; "
+            "lower test_size or provide more data."
+        )
+
+    cv_folds, calibration_folds = _fold_counts(y_train, cv_folds)
+    pipeline = build_pipeline(classifier, calibration_folds=calibration_folds)
     cv_summary: dict = {}
     if cv_folds > 1:
         folds = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=random_state)
